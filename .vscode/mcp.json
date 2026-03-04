@@ -1,0 +1,11 @@
+{
+  "servers": {
+    "check-list": {
+      "command": "node",
+      "args": ["dist/server.js"],
+      "env": {
+        "TASK_FILE": "${workspaceFolder}/../personal-os/task.md"
+      }
+    }
+  }
+}
