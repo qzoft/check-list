@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tasks</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg: #ffffff;
+      --fg: #1f2328;
+      --border: #d1d5db;
+      --section-bg: #f6f8fa;
+      --checked-fg: #6b7280;
+      --accent: #0969da;
+      --accent-hover: #0550ae;
+      --btn-bg: #0969da;
+      --btn-fg: #ffffff;
+      --btn-disabled-bg: #d1d5db;
+      --btn-disabled-fg: #6b7280;
+      --radius: 6px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --fg: #e6edf3;
+        --border: #30363d;
+        --section-bg: #161b22;
+        --checked-fg: #8b949e;
+        --accent: #58a6ff;
+        --accent-hover: #79c0ff;
+        --btn-bg: #238636;
+        --btn-fg: #ffffff;
+        --btn-disabled-bg: #21262d;
+        --btn-disabled-fg: #8b949e;
+      }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      background: var(--bg);
+      color: var(--fg);
+      margin: 0;
+      padding: 16px;
+      line-height: 1.5;
+    }
+
+    #app {
+      max-width: 600px;
+    }
+
+    h2 {
+      font-size: 16px;
+      font-weight: 600;
+      margin: 0 0 16px;
+    }
+
+    .section {
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--checked-fg);
+      margin: 0 0 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .task-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .task-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 4px 0;
+    }
+
+    .task-item input[type="checkbox"] {
+      margin-top: 2px;
+      flex-shrink: 0;
+      cursor: pointer;
+      accent-color: var(--accent);
+      width: 14px;
+      height: 14px;
+    }
+
+    .task-label {
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .task-label.done {
+      text-decoration: line-through;
+      color: var(--checked-fg);
+    }
+
+    #save {
+      margin-top: 20px;
+      padding: 6px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      background: var(--btn-bg);
+      color: var(--btn-fg);
+      transition: background 0.15s;
+    }
+
+    #save:hover:not(:disabled) {
+      background: var(--accent-hover);
+    }
+
+    #save:disabled {
+      background: var(--btn-disabled-bg);
+      color: var(--btn-disabled-fg);
+      cursor: not-allowed;
+    }
+
+    #status {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--checked-fg);
+      min-height: 16px;
+    }
+
+    #loading {
+      color: var(--checked-fg);
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h2>📋 Tasks</h2>
+    <div id="sections">
+      <p id="loading">Loading tasks…</p>
+    </div>
+    <button id="save" disabled>💾 Save changes</button>
+    <div id="status"></div>
+  </div>
+
+  <script>
+    // Map from line number -> { originalChecked, currentChecked }
+    const taskState = new Map();
+    let hasChanges = false;
+
+    const sectionsEl = document.getElementById('sections');
+    const saveBtn = document.getElementById('save');
+    const statusEl = document.getElementById('status');
+
+    function renderSections(sections) {
+      sectionsEl.innerHTML = '';
+
+      const visibleSections = sections.filter(s => s.tasks.length > 0);
+      if (visibleSections.length === 0) {
+        sectionsEl.innerHTML = '<p>No tasks found.</p>';
+        return;
+      }
+
+      for (const section of visibleSections) {
+        const sectionEl = document.createElement('div');
+        sectionEl.className = 'section';
+
+        const titleEl = document.createElement('div');
+        titleEl.className = 'section-title';
+        titleEl.textContent = section.name;
+        sectionEl.appendChild(titleEl);
+
+        const listEl = document.createElement('ul');
+        listEl.className = 'task-list';
+
+        for (const task of section.tasks) {
+          taskState.set(task.line, { original: task.checked, current: task.checked });
+
+          const itemEl = document.createElement('li');
+          itemEl.className = 'task-item';
+
+          const checkboxEl = document.createElement('input');
+          checkboxEl.type = 'checkbox';
+          checkboxEl.checked = task.checked;
+          checkboxEl.dataset.line = String(task.line);
+          checkboxEl.id = `task-${task.line}`;
+
+          const labelEl = document.createElement('label');
+          labelEl.htmlFor = `task-${task.line}`;
+          labelEl.className = 'task-label' + (task.checked ? ' done' : '');
+          labelEl.textContent = task.text;
+
+          checkboxEl.addEventListener('change', () => {
+            const state = taskState.get(task.line);
+            if (state) {
+              state.current = checkboxEl.checked;
+            }
+            labelEl.className = 'task-label' + (checkboxEl.checked ? ' done' : '');
+            updateSaveButton();
+          });
+
+          itemEl.appendChild(checkboxEl);
+          itemEl.appendChild(labelEl);
+          listEl.appendChild(itemEl);
+        }
+
+        sectionEl.appendChild(listEl);
+        sectionsEl.appendChild(sectionEl);
+      }
+    }
+
+    function updateSaveButton() {
+      hasChanges = false;
+      for (const [, state] of taskState) {
+        if (state.current !== state.original) {
+          hasChanges = true;
+          break;
+        }
+      }
+      saveBtn.disabled = !hasChanges;
+      statusEl.textContent = '';
+    }
+
+    async function saveChanges() {
+      const updates = [];
+      for (const [line, state] of taskState) {
+        if (state.current !== state.original) {
+          updates.push({ line, checked: state.current });
+        }
+      }
+
+      if (updates.length === 0) return;
+
+      saveBtn.disabled = true;
+      statusEl.textContent = 'Saving…';
+
+      try {
+        await window.__mcp_rpc('update_tasks', { updates });
+        // Mark all current states as original
+        for (const [, state] of taskState) {
+          state.original = state.current;
+        }
+        statusEl.textContent = `✅ Saved ${updates.length} change(s)`;
+        hasChanges = false;
+      } catch (err) {
+        statusEl.textContent = `❌ Error: ${err.message ?? String(err)}`;
+        saveBtn.disabled = false;
+      }
+    }
+
+    saveBtn.addEventListener('click', saveChanges);
+
+    // MCP Apps RPC protocol: the host calls window.__mcp_init with the tool result data
+    // and provides window.__mcp_rpc for calling back into the MCP server.
+    window.__mcp_init = function(data) {
+      try {
+        // data is the parsed JSON from the text content of list_tasks result
+        const sections = typeof data === 'string' ? JSON.parse(data) : data;
+        renderSections(sections);
+      } catch (err) {
+        sectionsEl.innerHTML = `<p>Error loading tasks: ${err.message ?? String(err)}</p>`;
+      }
+    };
+  </script>
+</body>
+</html>
