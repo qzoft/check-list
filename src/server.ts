@@ -3,24 +3,30 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { fileURLToPath } from 'url';
 import path from 'path';
-import { readTaskFile, writeTaskFile } from './writer.js';
-import { parseTasks, serializeTasks } from './parser.js';
+import { discoverMarkdownFiles, readTaskFile, writeTaskFile } from './writer.js';
+import { parseTasks, serializeTasks, FileTaskGroup } from './parser.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const taskFile = process.env['TASK_FILE'];
-if (!taskFile) {
-  console.error('Error: TASK_FILE environment variable is not set.');
-  console.error('Set it to the path of your task.md file, e.g.:');
-  console.error('  export TASK_FILE=~/repos/personal-os/task.md');
-  process.exit(1);
-}
-
-// Resolve ~ and relative paths
-const resolvedTaskFile = taskFile.startsWith('~')
-  ? path.join(process.env['HOME'] ?? '', taskFile.slice(1))
-  : path.resolve(taskFile);
+// Use PROJECT_DIR if set, otherwise fall back to TASK_FILE's parent dir, or CWD
+const projectDir = (() => {
+  const dir = process.env['PROJECT_DIR'];
+  if (dir) {
+    return dir.startsWith('~')
+      ? path.join(process.env['HOME'] ?? '', dir.slice(1))
+      : path.resolve(dir);
+  }
+  // Backward-compat: if TASK_FILE is set, use its parent directory
+  const taskFile = process.env['TASK_FILE'];
+  if (taskFile) {
+    const resolved = taskFile.startsWith('~')
+      ? path.join(process.env['HOME'] ?? '', taskFile.slice(1))
+      : path.resolve(taskFile);
+    return path.dirname(resolved);
+  }
+  return process.cwd();
+})();
 
 // Path to the MCP App HTML file (bundled alongside this server)
 const uiHtmlPath = path.resolve(__dirname, '..', 'ui', 'task-checklist.html');
@@ -28,19 +34,19 @@ const uiResourceUri = `file://${uiHtmlPath}`;
 
 const server = new McpServer({
   name: 'check-list',
-  version: '1.0.0',
+  version: '2.0.0',
 });
 
 server.registerTool(
   'list_tasks',
   {
-    description: 'Read and display the task checklist from the configured markdown file',
+    description: 'Discover and display checklists from all markdown files in the project',
     inputSchema: {},
   },
   async () => {
-    let content: string;
+    let mdFiles: string[];
     try {
-      content = await readTaskFile(resolvedTaskFile);
+      mdFiles = await discoverMarkdownFiles(projectDir);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return {
@@ -48,13 +54,30 @@ server.registerTool(
         content: [
           {
             type: 'text' as const,
-            text: `Error reading task file at ${resolvedTaskFile}: ${message}`,
+            text: `Error scanning project directory ${projectDir}: ${message}`,
           },
         ],
       };
     }
 
-    const sections = parseTasks(content);
+    const fileGroups: FileTaskGroup[] = [];
+
+    for (const filePath of mdFiles) {
+      let content: string;
+      try {
+        content = await readTaskFile(filePath);
+      } catch {
+        continue; // skip files we can't read
+      }
+
+      const sections = parseTasks(content);
+      const hasTasks = sections.some((s) => s.tasks.length > 0);
+      if (!hasTasks) continue;
+
+      // Use relative path for cleaner display
+      const relPath = path.relative(projectDir, filePath);
+      fileGroups.push({ file: relPath, sections });
+    }
 
     return {
       _meta: {
@@ -65,7 +88,7 @@ server.registerTool(
       content: [
         {
           type: 'text' as const,
-          text: JSON.stringify(sections, null, 2),
+          text: JSON.stringify(fileGroups, null, 2),
         },
       ],
     };
@@ -75,8 +98,9 @@ server.registerTool(
 server.registerTool(
   'update_tasks',
   {
-    description: 'Update checkbox states in the task markdown file',
+    description: 'Update checkbox states in a project markdown file (auto-saved on toggle)',
     inputSchema: {
+      file: z.string().describe('Relative path to the markdown file within the project'),
       updates: z.array(
         z.object({
           line: z.number().describe('0-indexed line number in the markdown file'),
@@ -85,10 +109,12 @@ server.registerTool(
       ).describe('Array of line updates to apply'),
     },
   },
-  async ({ updates }) => {
+  async ({ file, updates }) => {
+    const filePath = path.resolve(projectDir, file);
+
     let content: string;
     try {
-      content = await readTaskFile(resolvedTaskFile);
+      content = await readTaskFile(filePath);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return {
@@ -96,7 +122,7 @@ server.registerTool(
         content: [
           {
             type: 'text' as const,
-            text: `Error reading task file at ${resolvedTaskFile}: ${message}`,
+            text: `Error reading file ${file}: ${message}`,
           },
         ],
       };
@@ -105,7 +131,7 @@ server.registerTool(
     const updated = serializeTasks(content, updates);
 
     try {
-      await writeTaskFile(resolvedTaskFile, updated);
+      await writeTaskFile(filePath, updated);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return {
@@ -113,7 +139,7 @@ server.registerTool(
         content: [
           {
             type: 'text' as const,
-            text: `Error writing task file at ${resolvedTaskFile}: ${message}`,
+            text: `Error writing file ${file}: ${message}`,
           },
         ],
       };
@@ -129,7 +155,7 @@ server.registerTool(
       content: [
         {
           type: 'text' as const,
-          text: `✅ Saved: ${parts.join(', ')}.`,
+          text: `✅ Saved ${file}: ${parts.join(', ')}.`,
         },
       ],
     };
