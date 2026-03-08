@@ -172,13 +172,14 @@
     const sectionsEl = document.getElementById('sections');
     const statusEl = document.getElementById('status');
 
+    const STATUS_DISPLAY_MS = 3000;
     let statusTimer = null;
 
     function showStatus(msg, type) {
       statusEl.textContent = msg;
       statusEl.className = type || '';
       if (statusTimer) clearTimeout(statusTimer);
-      statusTimer = setTimeout(() => { statusEl.textContent = ''; statusEl.className = ''; }, 3000);
+      statusTimer = setTimeout(() => { statusEl.textContent = ''; statusEl.className = ''; }, STATUS_DISPLAY_MS);
     }
 
     /**
@@ -221,7 +222,11 @@
 
         const headerEl = document.createElement('div');
         headerEl.className = 'file-header';
-        headerEl.innerHTML = `<span class="icon">📄</span> ${escapeHtml(fg.file)}`;
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'icon';
+        iconSpan.textContent = '📄';
+        headerEl.appendChild(iconSpan);
+        headerEl.appendChild(document.createTextNode(' ' + fg.file));
         groupEl.appendChild(headerEl);
 
         const bodyEl = document.createElement('div');
@@ -273,12 +278,6 @@
         groupEl.appendChild(bodyEl);
         sectionsEl.appendChild(groupEl);
       }
-    }
-
-    function escapeHtml(str) {
-      const el = document.createElement('span');
-      el.textContent = str;
-      return el.innerHTML;
     }
 
     // MCP Apps RPC protocol: the host calls window.__mcp_init with the tool result data

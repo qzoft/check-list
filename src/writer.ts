@@ -30,7 +30,7 @@ export async function discoverMarkdownFiles(dir: string): Promise<string[]> {
     }
 
     for (const entry of entries) {
-      if (entry.name.startsWith('.') && entry.name !== '.') continue;
+      if (entry.name.startsWith('.')) continue;
 
       const fullPath = path.join(current, entry.name);
 
@@ -45,6 +45,7 @@ export async function discoverMarkdownFiles(dir: string): Promise<string[]> {
   }
 
   await walk(dir);
+  // Sort alphabetically for consistent ordering in the UI
   results.sort();
   return results;
 }
