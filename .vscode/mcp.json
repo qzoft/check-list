@@ -4,7 +4,7 @@
       "command": "node",
       "args": ["dist/server.js"],
       "env": {
-        "TASK_FILE": "C:\\personal-os\\task.md"
+        "PROJECT_DIR": "${workspaceFolder}"
       }
     }
   }

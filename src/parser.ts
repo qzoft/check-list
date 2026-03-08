@@ -9,6 +9,12 @@ export interface TaskSection {
   tasks: Task[];
 }
 
+/** Represents all checkbox tasks found in a single markdown file. */
+export interface FileTaskGroup {
+  file: string;
+  sections: TaskSection[];
+}
+
 /**
  * Parses a markdown string, finding section headers (## SectionName) and
  * checkbox lines within each section.
@@ -29,10 +35,16 @@ export function parseTasks(markdown: string): TaskSection[] {
       continue;
     }
 
-    // Match checkbox lines within a section
-    if (currentSection) {
-      const checkedMatch = line.match(/^- \[x\]\s+(.+)$/i);
-      const uncheckedMatch = line.match(/^- \[ \]\s+(.+)$/);
+    // Match checkbox lines (with or without a section header)
+    const checkedMatch = line.match(/^- \[x\]\s+(.+)$/i);
+    const uncheckedMatch = line.match(/^- \[ \]\s+(.+)$/);
+
+    if (checkedMatch || uncheckedMatch) {
+      // Ensure there is a section to hold the task
+      if (!currentSection) {
+        currentSection = { name: 'Tasks', tasks: [] };
+        sections.push(currentSection);
+      }
 
       if (checkedMatch) {
         currentSection.tasks.push({
