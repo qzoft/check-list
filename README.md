@@ -1,6 +1,6 @@
 # check-list
 
-An MCP App for interactive task management from markdown files, rendered as a rich checkbox UI inside VS Code Copilot Chat.
+A general-purpose MCP App that discovers and displays checklists from **all markdown files** in your project, rendered as an interactive checkbox UI inside VS Code Copilot Chat. Changes are saved automatically — no confirmation needed.
 
 ## Prerequisites
 
@@ -25,21 +25,16 @@ An MCP App for interactive task management from markdown files, rendered as a ri
    npm run build
    ```
 
-4. Set the `TASK_FILE` environment variable to point to your `task.md` file:
-   ```sh
-   export TASK_FILE=~/repos/personal-os/task.md
-   ```
+4. Open VS Code — the `.vscode/mcp.json` config auto-registers the server. VS Code will pick it up automatically when you open the workspace.
 
-5. Open VS Code — the `.vscode/mcp.json` config auto-registers the server. VS Code will pick it up automatically when you open the workspace.
-
-6. In Copilot Chat, ask **"show my tasks"** → the `list_tasks` tool renders the interactive checkbox UI.
+5. In Copilot Chat, ask **"show my tasks"** → the `list_tasks` tool scans the project and renders the interactive checkbox UI.
 
 ## Usage
 
 Once the server is running, you can use two tools in Copilot Chat:
 
-- **`list_tasks`** — reads your `task.md` file and displays an interactive checkbox UI. Click checkboxes to toggle task states.
-- **`update_tasks`** — called automatically when you click "💾 Save changes" in the UI. Can also be called directly by Copilot to update tasks.
+- **`list_tasks`** — scans all `.md` files in the project directory, finds checkbox items, and displays an interactive UI grouped by file and section. Toggle any checkbox and it saves automatically.
+- **`update_tasks`** — called automatically when you toggle a checkbox. Can also be called directly by Copilot to update tasks in any markdown file.
 
 ## How it works
 
@@ -52,30 +47,33 @@ Once the server is running, you can use two tools in Copilot Chat:
 │         ▼                │
 │   list_tasks tool ───────┼──► MCP Server (Node.js)
 │         │                │         │
-│         │                │    reads task.md
+│         │                │    scans project for *.md
 │         │                │    parses checkboxes
 │         │                │         │
 │   renders iframe UI ◄────┼─────────┘
 │   (task-checklist.html)  │
 │         │                │
-│   [checkbox clicks]      │
+│   [checkbox toggle]      │
 │         │                │
-│   update_tasks ──────────┼──► MCP Server writes task.md
+│   auto-save ─────────────┼──► MCP Server writes to file
 └──────────────────────────┘
 ```
 
-1. The MCP server reads your `task.md` file, parses the checkbox sections, and returns structured JSON.
-2. VS Code renders `ui/task-checklist.html` as an interactive iframe inside the chat.
-3. The HTML UI receives the task data, displays grouped checkboxes, and lets you toggle them.
-4. Clicking "💾 Save changes" calls the `update_tasks` tool which writes the updated state back to `task.md`.
+1. The MCP server recursively discovers all `.md` files in the project directory.
+2. Each file is parsed for `## Section` headers and `- [ ]` / `- [x]` checkbox items.
+3. VS Code renders `ui/task-checklist.html` as an interactive iframe grouped by file.
+4. Toggling a checkbox **immediately saves** the change back to the originating file — no save button required.
 
 ## Configuration
 
-| Variable    | Description                                      | Example                                    |
-|-------------|--------------------------------------------------|--------------------------------------------|
-| `TASK_FILE` | Path to the markdown file with your task list    | `~/repos/personal-os/task.md`              |
+| Variable      | Description                                         | Example                          |
+|---------------|-----------------------------------------------------|----------------------------------|
+| `PROJECT_DIR` | Root directory to scan for markdown files            | `~/repos/my-project`             |
+| `TASK_FILE`   | *(backward-compat)* Falls back to parent directory   | `~/repos/my-project/task.md`     |
 
-The `TASK_FILE` path is configured in `.vscode/mcp.json`:
+If neither is set, the server uses the current working directory.
+
+The project directory is configured in `.vscode/mcp.json`:
 
 ```json
 {
@@ -84,18 +82,16 @@ The `TASK_FILE` path is configured in `.vscode/mcp.json`:
       "command": "node",
       "args": ["dist/server.js"],
       "env": {
-        "TASK_FILE": "${workspaceFolder}/../personal-os/task.md"
+        "PROJECT_DIR": "${workspaceFolder}"
       }
     }
   }
 }
 ```
 
-Adjust the `TASK_FILE` value to point to wherever your `task.md` lives.
-
 ## Task file format
 
-The parser recognizes `## Section` headers and checkbox list items:
+The parser recognizes `## Section` headers and checkbox list items in any `.md` file:
 
 ```markdown
 ## Today
@@ -107,7 +103,9 @@ The parser recognizes `## Section` headers and checkbox list items:
 - [ ] Deploy to staging
 ```
 
-Non-checkbox list items and other markdown content are preserved as-is when writing back.
+Checkbox items that appear before any section header are grouped under a default "Tasks" section. Non-checkbox content is preserved as-is when writing back.
+
+The server skips common non-project directories (`node_modules`, `.git`, `dist`, `build`, etc.) during scanning.
 
 ## Project structure
 
@@ -121,7 +119,7 @@ check-list/
 ├── src/
 │   ├── server.ts          # MCP server entry point
 │   ├── parser.ts          # Markdown checkbox parser
-│   └── writer.ts          # File read/write utilities
+│   └── writer.ts          # File discovery & read/write
 └── ui/
     └── task-checklist.html # MCP App UI rendered in iframe
 ```

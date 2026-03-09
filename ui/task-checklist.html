@@ -17,11 +17,11 @@
       --checked-fg: #6b7280;
       --accent: #0969da;
       --accent-hover: #0550ae;
-      --btn-bg: #0969da;
-      --btn-fg: #ffffff;
-      --btn-disabled-bg: #d1d5db;
-      --btn-disabled-fg: #6b7280;
+      --file-bg: #f0f4f8;
+      --file-border: #c8d1da;
       --radius: 6px;
+      --save-ok: #1a7f37;
+      --save-err: #cf222e;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -33,10 +33,10 @@
         --checked-fg: #8b949e;
         --accent: #58a6ff;
         --accent-hover: #79c0ff;
-        --btn-bg: #238636;
-        --btn-fg: #ffffff;
-        --btn-disabled-bg: #21262d;
-        --btn-disabled-fg: #8b949e;
+        --file-bg: #161b22;
+        --file-border: #30363d;
+        --save-ok: #3fb950;
+        --save-err: #f85149;
       }
     }
 
@@ -60,8 +60,40 @@
       margin: 0 0 16px;
     }
 
-    .section {
+    .file-group {
       margin-bottom: 20px;
+      border: 1px solid var(--file-border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .file-header {
+      font-size: 12px;
+      font-weight: 600;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      padding: 6px 10px;
+      background: var(--file-bg);
+      border-bottom: 1px solid var(--file-border);
+      color: var(--checked-fg);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .file-header .icon {
+      font-size: 14px;
+    }
+
+    .file-body {
+      padding: 8px 10px;
+    }
+
+    .section {
+      margin-bottom: 12px;
+    }
+
+    .section:last-child {
+      margin-bottom: 0;
     }
 
     .section-title {
@@ -70,7 +102,7 @@
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: var(--checked-fg);
-      margin: 0 0 8px;
+      margin: 0 0 6px;
       padding-bottom: 4px;
       border-bottom: 1px solid var(--border);
     }
@@ -85,7 +117,7 @@
       display: flex;
       align-items: flex-start;
       gap: 8px;
-      padding: 4px 0;
+      padding: 3px 0;
     }
 
     .task-item input[type="checkbox"] {
@@ -95,6 +127,10 @@
       accent-color: var(--accent);
       width: 14px;
       height: 14px;
+    }
+
+    .task-item input[type="checkbox"]:disabled {
+      cursor: wait;
     }
 
     .task-label {
@@ -107,36 +143,16 @@
       color: var(--checked-fg);
     }
 
-    #save {
-      margin-top: 20px;
-      padding: 6px 14px;
-      font-size: 13px;
-      font-weight: 500;
-      font-family: inherit;
-      border: none;
-      border-radius: var(--radius);
-      cursor: pointer;
-      background: var(--btn-bg);
-      color: var(--btn-fg);
-      transition: background 0.15s;
-    }
-
-    #save:hover:not(:disabled) {
-      background: var(--accent-hover);
-    }
-
-    #save:disabled {
-      background: var(--btn-disabled-bg);
-      color: var(--btn-disabled-fg);
-      cursor: not-allowed;
-    }
-
     #status {
       margin-top: 8px;
       font-size: 12px;
       color: var(--checked-fg);
       min-height: 16px;
+      transition: opacity 0.3s;
     }
+
+    #status.ok { color: var(--save-ok); }
+    #status.err { color: var(--save-err); }
 
     #loading {
       color: var(--checked-fg);
@@ -149,124 +165,127 @@
     <div id="sections">
       <p id="loading">Loading tasks…</p>
     </div>
-    <button id="save" disabled>💾 Save changes</button>
     <div id="status"></div>
   </div>
 
   <script>
-    // Map from line number -> { originalChecked, currentChecked }
-    const taskState = new Map();
-    let hasChanges = false;
-
     const sectionsEl = document.getElementById('sections');
-    const saveBtn = document.getElementById('save');
     const statusEl = document.getElementById('status');
 
-    function renderSections(sections) {
+    const STATUS_DISPLAY_MS = 3000;
+    let statusTimer = null;
+
+    function showStatus(msg, type) {
+      statusEl.textContent = msg;
+      statusEl.className = type || '';
+      if (statusTimer) clearTimeout(statusTimer);
+      statusTimer = setTimeout(() => { statusEl.textContent = ''; statusEl.className = ''; }, STATUS_DISPLAY_MS);
+    }
+
+    /**
+     * Auto-save a single checkbox toggle immediately.
+     */
+    async function autoSave(file, line, checked, checkboxEl, labelEl) {
+      checkboxEl.disabled = true;
+
+      try {
+        await window.__mcp_rpc('update_tasks', {
+          file,
+          updates: [{ line, checked }],
+        });
+        showStatus(`✅ Saved`, 'ok');
+      } catch (err) {
+        // Revert on failure
+        checkboxEl.checked = !checked;
+        labelEl.className = 'task-label' + (!checked ? ' done' : '');
+        showStatus(`❌ Error: ${err.message ?? String(err)}`, 'err');
+      } finally {
+        checkboxEl.disabled = false;
+      }
+    }
+
+    function renderFileGroups(fileGroups) {
       sectionsEl.innerHTML = '';
 
-      const visibleSections = sections.filter(s => s.tasks.length > 0);
-      if (visibleSections.length === 0) {
-        sectionsEl.innerHTML = '<p>No tasks found.</p>';
+      const withTasks = fileGroups.filter(fg =>
+        fg.sections.some(s => s.tasks.length > 0)
+      );
+
+      if (withTasks.length === 0) {
+        sectionsEl.innerHTML = '<p>No checklists found in any markdown file.</p>';
         return;
       }
 
-      for (const section of visibleSections) {
-        const sectionEl = document.createElement('div');
-        sectionEl.className = 'section';
+      for (const fg of withTasks) {
+        const groupEl = document.createElement('div');
+        groupEl.className = 'file-group';
 
-        const titleEl = document.createElement('div');
-        titleEl.className = 'section-title';
-        titleEl.textContent = section.name;
-        sectionEl.appendChild(titleEl);
+        const headerEl = document.createElement('div');
+        headerEl.className = 'file-header';
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'icon';
+        iconSpan.textContent = '📄';
+        headerEl.appendChild(iconSpan);
+        headerEl.appendChild(document.createTextNode(' ' + fg.file));
+        groupEl.appendChild(headerEl);
 
-        const listEl = document.createElement('ul');
-        listEl.className = 'task-list';
+        const bodyEl = document.createElement('div');
+        bodyEl.className = 'file-body';
 
-        for (const task of section.tasks) {
-          taskState.set(task.line, { original: task.checked, current: task.checked });
+        const visibleSections = fg.sections.filter(s => s.tasks.length > 0);
 
-          const itemEl = document.createElement('li');
-          itemEl.className = 'task-item';
+        for (const section of visibleSections) {
+          const sectionEl = document.createElement('div');
+          sectionEl.className = 'section';
 
-          const checkboxEl = document.createElement('input');
-          checkboxEl.type = 'checkbox';
-          checkboxEl.checked = task.checked;
-          checkboxEl.dataset.line = String(task.line);
-          checkboxEl.id = `task-${task.line}`;
+          const titleEl = document.createElement('div');
+          titleEl.className = 'section-title';
+          titleEl.textContent = section.name;
+          sectionEl.appendChild(titleEl);
 
-          const labelEl = document.createElement('label');
-          labelEl.htmlFor = `task-${task.line}`;
-          labelEl.className = 'task-label' + (task.checked ? ' done' : '');
-          labelEl.textContent = task.text;
+          const listEl = document.createElement('ul');
+          listEl.className = 'task-list';
 
-          checkboxEl.addEventListener('change', () => {
-            const state = taskState.get(task.line);
-            if (state) {
-              state.current = checkboxEl.checked;
-            }
-            labelEl.className = 'task-label' + (checkboxEl.checked ? ' done' : '');
-            updateSaveButton();
-          });
+          for (const task of section.tasks) {
+            const itemEl = document.createElement('li');
+            itemEl.className = 'task-item';
 
-          itemEl.appendChild(checkboxEl);
-          itemEl.appendChild(labelEl);
-          listEl.appendChild(itemEl);
+            const checkboxEl = document.createElement('input');
+            checkboxEl.type = 'checkbox';
+            checkboxEl.checked = task.checked;
+            checkboxEl.id = `task-${fg.file}-${task.line}`;
+
+            const labelEl = document.createElement('label');
+            labelEl.htmlFor = checkboxEl.id;
+            labelEl.className = 'task-label' + (task.checked ? ' done' : '');
+            labelEl.textContent = task.text;
+
+            checkboxEl.addEventListener('change', () => {
+              const newChecked = checkboxEl.checked;
+              labelEl.className = 'task-label' + (newChecked ? ' done' : '');
+              autoSave(fg.file, task.line, newChecked, checkboxEl, labelEl);
+            });
+
+            itemEl.appendChild(checkboxEl);
+            itemEl.appendChild(labelEl);
+            listEl.appendChild(itemEl);
+          }
+
+          sectionEl.appendChild(listEl);
+          bodyEl.appendChild(sectionEl);
         }
 
-        sectionEl.appendChild(listEl);
-        sectionsEl.appendChild(sectionEl);
+        groupEl.appendChild(bodyEl);
+        sectionsEl.appendChild(groupEl);
       }
     }
-
-    function updateSaveButton() {
-      hasChanges = false;
-      for (const [, state] of taskState) {
-        if (state.current !== state.original) {
-          hasChanges = true;
-          break;
-        }
-      }
-      saveBtn.disabled = !hasChanges;
-      statusEl.textContent = '';
-    }
-
-    async function saveChanges() {
-      const updates = [];
-      for (const [line, state] of taskState) {
-        if (state.current !== state.original) {
-          updates.push({ line, checked: state.current });
-        }
-      }
-
-      if (updates.length === 0) return;
-
-      saveBtn.disabled = true;
-      statusEl.textContent = 'Saving…';
-
-      try {
-        await window.__mcp_rpc('update_tasks', { updates });
-        // Mark all current states as original
-        for (const [, state] of taskState) {
-          state.original = state.current;
-        }
-        statusEl.textContent = `✅ Saved ${updates.length} change(s)`;
-        hasChanges = false;
-      } catch (err) {
-        statusEl.textContent = `❌ Error: ${err.message ?? String(err)}`;
-        saveBtn.disabled = false;
-      }
-    }
-
-    saveBtn.addEventListener('click', saveChanges);
 
     // MCP Apps RPC protocol: the host calls window.__mcp_init with the tool result data
     // and provides window.__mcp_rpc for calling back into the MCP server.
     window.__mcp_init = function(data) {
       try {
-        // data is the parsed JSON from the text content of list_tasks result
-        const sections = typeof data === 'string' ? JSON.parse(data) : data;
-        renderSections(sections);
+        const fileGroups = typeof data === 'string' ? JSON.parse(data) : data;
+        renderFileGroups(fileGroups);
       } catch (err) {
         sectionsEl.innerHTML = `<p>Error loading tasks: ${err.message ?? String(err)}</p>`;
       }
