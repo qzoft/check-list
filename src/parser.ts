@@ -14,7 +14,7 @@ export interface TaskSection {
  * checkbox lines within each section.
  */
 export function parseTasks(markdown: string): TaskSection[] {
-  const lines = markdown.split('\n');
+  const lines = markdown.replace(/\r/g, '').split('\n');
   const sections: TaskSection[] = [];
   let currentSection: TaskSection | null = null;
 
