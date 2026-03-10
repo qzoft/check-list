@@ -1,8 +1,11 @@
+#!/usr/bin/env node
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { registerAppTool, registerAppResource, RESOURCE_MIME_TYPE } from '@modelcontextprotocol/ext-apps/server';
 import { z } from 'zod';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import fs from 'fs';
 import { discoverMarkdownFiles, readTaskFile, writeTaskFile } from './writer.js';
 import { parseTasks, serializeTasks, FileTaskGroup } from './parser.js';
 
@@ -28,20 +31,36 @@ const projectDir = (() => {
   return process.cwd();
 })();
 
-// Path to the MCP App HTML file (bundled alongside this server)
+// MCP App UI resource
 const uiHtmlPath = path.resolve(__dirname, '..', 'ui', 'task-checklist.html');
-const uiResourceUri = `file://${uiHtmlPath}`;
+const uiResourceUri = 'ui://check-list/task-checklist.html';
 
 const server = new McpServer({
   name: 'check-list',
   version: '2.0.0',
 });
 
-server.registerTool(
+// Register the HTML resource for the UI
+registerAppResource(
+  server,
+  'Task Checklist',
+  uiResourceUri,
+  { description: 'Interactive checkbox UI for task management' },
+  async () => ({
+    contents: [{
+      uri: uiResourceUri,
+      mimeType: RESOURCE_MIME_TYPE,
+      text: fs.readFileSync(uiHtmlPath, 'utf-8'),
+    }],
+  }),
+);
+
+registerAppTool(
+  server,
   'list_tasks',
   {
     description: 'Discover and display checklists from all markdown files in the project',
-    inputSchema: {},
+    _meta: { ui: { resourceUri: uiResourceUri } },
   },
   async () => {
     let mdFiles: string[];
@@ -80,22 +99,19 @@ server.registerTool(
     }
 
     return {
-      _meta: {
-        ui: {
-          resourceUri: uiResourceUri,
-        },
-      },
       content: [
         {
           type: 'text' as const,
-          text: JSON.stringify(fileGroups, null, 2),
+          text: 'The tasks are displayed in the interactive UI above. Do not repeat or summarize the task content in your response — the user can already see and interact with them.',
         },
       ],
+      structuredContent: { files: fileGroups } as Record<string, unknown>,
     };
   }
 );
 
-server.registerTool(
+registerAppTool(
+  server,
   'update_tasks',
   {
     description: 'Update checkbox states in a project markdown file (auto-saved on toggle)',
@@ -108,6 +124,7 @@ server.registerTool(
         })
       ).describe('Array of line updates to apply'),
     },
+    _meta: { ui: { resourceUri: uiResourceUri, visibility: ['app'] } },
   },
   async ({ file, updates }) => {
     const filePath = path.resolve(projectDir, file);

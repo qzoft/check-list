@@ -1,14 +1,23 @@
 {
   "name": "@qzoft/check-list",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP App for interactive task management from markdown files",
   "type": "module",
   "main": "dist/server.js",
+  "bin": {
+    "check-list": "dist/server.js"
+  },
+  "files": [
+    "dist",
+    "ui"
+  ],
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "prepare": "npm run build"
   },
   "dependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.2.0",
     "@modelcontextprotocol/sdk": "^1.27.1"
   },
   "devDependencies": {

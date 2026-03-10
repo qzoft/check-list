@@ -1,6 +1,8 @@
-# check-list
+# @qzoft/check-list
 
 A general-purpose MCP App that discovers and displays checklists from **all markdown files** in your project, rendered as an interactive checkbox UI inside VS Code Copilot Chat. Changes are saved automatically — no confirmation needed.
+
+Available on npm: [`@qzoft/check-list`](https://www.npmjs.com/package/@qzoft/check-list)
 
 ## Prerequisites
 
@@ -9,25 +11,25 @@ A general-purpose MCP App that discovers and displays checklists from **all mark
 
 ## Setup
 
-1. Clone this repo:
-   ```sh
-   git clone https://github.com/qzoft/check-list.git
-   cd check-list
-   ```
+Add the following to your project's `.vscode/mcp.json`:
 
-2. Install dependencies:
-   ```sh
-   npm install
-   ```
+```json
+{
+  "servers": {
+    "check-list": {
+      "command": "npx",
+      "args": ["-y", "@qzoft/check-list"],
+      "env": {
+        "PROJECT_DIR": "${workspaceFolder}"
+      }
+    }
+  }
+}
+```
 
-3. Build the project:
-   ```sh
-   npm run build
-   ```
+That's it — VS Code will download and run the server automatically. No cloning or building required.
 
-4. Open VS Code — the `.vscode/mcp.json` config auto-registers the server. VS Code will pick it up automatically when you open the workspace.
-
-5. In Copilot Chat, ask **"show my tasks"** → the `list_tasks` tool scans the project and renders the interactive checkbox UI.
+In Copilot Chat, ask **"show my tasks"** → the `list_tasks` tool scans the project and renders the interactive checkbox UI.
 
 ## Usage
 
@@ -69,25 +71,8 @@ Once the server is running, you can use two tools in Copilot Chat:
 | Variable      | Description                                         | Example                          |
 |---------------|-----------------------------------------------------|----------------------------------|
 | `PROJECT_DIR` | Root directory to scan for markdown files            | `~/repos/my-project`             |
-| `TASK_FILE`   | *(backward-compat)* Falls back to parent directory   | `~/repos/my-project/task.md`     |
 
 If neither is set, the server uses the current working directory.
-
-The project directory is configured in `.vscode/mcp.json`:
-
-```json
-{
-  "servers": {
-    "check-list": {
-      "command": "node",
-      "args": ["dist/server.js"],
-      "env": {
-        "PROJECT_DIR": "${workspaceFolder}"
-      }
-    }
-  }
-}
-```
 
 ## Task file format
 
@@ -96,7 +81,7 @@ The parser recognizes `## Section` headers and checkbox list items in any `.md` 
 ```markdown
 ## Today
 - [ ] Write tests
-- [x] Update README
+- [ ] Update README
 
 ## This Week
 - [ ] Review PRs
@@ -110,12 +95,10 @@ The server skips common non-project directories (`node_modules`, `.git`, `dist`,
 ## Project structure
 
 ```
-check-list/
+@qzoft/check-list
 ├── package.json
 ├── tsconfig.json
 ├── README.md
-├── .vscode/
-│   └── mcp.json          # VS Code MCP server config
 ├── src/
 │   ├── server.ts          # MCP server entry point
 │   ├── parser.ts          # Markdown checkbox parser

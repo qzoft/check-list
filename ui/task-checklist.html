@@ -175,6 +175,91 @@
     const STATUS_DISPLAY_MS = 3000;
     let statusTimer = null;
 
+    // --- MCP Apps postMessage transport ---
+    let rpcId = 1;
+    const pendingRequests = new Map();
+
+    function sendRequest(method, params) {
+      const id = rpcId++;
+      window.parent.postMessage({ jsonrpc: '2.0', id, method, params }, '*');
+      return new Promise((resolve, reject) => {
+        pendingRequests.set(id, { resolve, reject });
+      });
+    }
+
+    function sendNotification(method, params) {
+      window.parent.postMessage({ jsonrpc: '2.0', method, params }, '*');
+    }
+
+    // Handle incoming messages from host
+    window.addEventListener('message', (event) => {
+      const data = event.data;
+      if (!data || typeof data !== 'object') return;
+
+      // Response to a pending request
+      if ('id' in data && pendingRequests.has(data.id)) {
+        const { resolve, reject } = pendingRequests.get(data.id);
+        pendingRequests.delete(data.id);
+        if (data.error) {
+          reject(new Error(data.error.message || JSON.stringify(data.error)));
+        } else {
+          resolve(data.result);
+        }
+        return;
+      }
+
+      // Notifications from host
+      if (data.method === 'ui/notifications/tool-result') {
+        handleToolResult(data.params);
+      }
+    });
+
+    function handleToolResult(result) {
+      try {
+        // Prefer structuredContent, fall back to parsing text content
+        let fileGroups = result.structuredContent?.files;
+        if (!fileGroups) {
+          const textContent = result.content?.find(c => c.type === 'text');
+          if (textContent) {
+            fileGroups = JSON.parse(textContent.text);
+          }
+        }
+        if (fileGroups) {
+          renderFileGroups(fileGroups);
+        }
+      } catch (err) {
+        sectionsEl.innerHTML = '<p>Error loading tasks: ' + (err.message || String(err)) + '</p>';
+      }
+    }
+
+    // Notify host when content size changes so the iframe resizes
+    let lastWidth = 0;
+    let lastHeight = 0;
+    const resizeObserver = new ResizeObserver(() => {
+      const width = document.documentElement.scrollWidth;
+      const height = document.documentElement.scrollHeight;
+      if (width !== lastWidth || height !== lastHeight) {
+        lastWidth = width;
+        lastHeight = height;
+        sendNotification('ui/notifications/size-changed', { width, height });
+      }
+    });
+    resizeObserver.observe(document.documentElement);
+
+    // Initialize: handshake with host
+    (async () => {
+      try {
+        await sendRequest('ui/initialize', {
+          protocolVersion: '2026-01-26',
+          capabilities: {},
+          clientInfo: { name: 'check-list', version: '1.0.0' },
+        });
+        sendNotification('ui/notifications/initialized', {});
+      } catch (err) {
+        console.error('MCP Apps init failed:', err);
+      }
+    })();
+
     function showStatus(msg, type) {
       statusEl.textContent = msg;
       statusEl.className = type || '';
@@ -183,22 +268,22 @@
     }
 
     /**
-     * Auto-save a single checkbox toggle immediately.
+     * Auto-save a single checkbox toggle by calling the update_tasks tool via the host.
      */
     async function autoSave(file, line, checked, checkboxEl, labelEl) {
       checkboxEl.disabled = true;
 
       try {
-        await window.__mcp_rpc('update_tasks', {
-          file,
-          updates: [{ line, checked }],
+        await sendRequest('tools/call', {
+          name: 'update_tasks',
+          arguments: { file, updates: [{ line, checked }] },
         });
-        showStatus(`✅ Saved`, 'ok');
+        showStatus('\u2705 Saved', 'ok');
       } catch (err) {
         // Revert on failure
         checkboxEl.checked = !checked;
         labelEl.className = 'task-label' + (!checked ? ' done' : '');
-        showStatus(`❌ Error: ${err.message ?? String(err)}`, 'err');
+        showStatus('\u274C Error: ' + (err.message || String(err)), 'err');
       } finally {
         checkboxEl.disabled = false;
       }
@@ -224,7 +309,7 @@
         headerEl.className = 'file-header';
         const iconSpan = document.createElement('span');
         iconSpan.className = 'icon';
-        iconSpan.textContent = '📄';
+        iconSpan.textContent = '\uD83D\uDCC4';
         headerEl.appendChild(iconSpan);
         headerEl.appendChild(document.createTextNode(' ' + fg.file));
         groupEl.appendChild(headerEl);
@@ -253,7 +338,7 @@
             const checkboxEl = document.createElement('input');
             checkboxEl.type = 'checkbox';
             checkboxEl.checked = task.checked;
-            checkboxEl.id = `task-${fg.file}-${task.line}`;
+            checkboxEl.id = 'task-' + fg.file + '-' + task.line;
 
             const labelEl = document.createElement('label');
             labelEl.htmlFor = checkboxEl.id;
@@ -279,17 +364,6 @@
         sectionsEl.appendChild(groupEl);
       }
     }
-
-    // MCP Apps RPC protocol: the host calls window.__mcp_init with the tool result data
-    // and provides window.__mcp_rpc for calling back into the MCP server.
-    window.__mcp_init = function(data) {
-      try {
-        const fileGroups = typeof data === 'string' ? JSON.parse(data) : data;
-        renderFileGroups(fileGroups);
-      } catch (err) {
-        sectionsEl.innerHTML = `<p>Error loading tasks: ${err.message ?? String(err)}</p>`;
-      }
-    };
   </script>
 </body>
 </html>
