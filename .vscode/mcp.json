@@ -2,10 +2,7 @@
   "servers": {
     "check-list": {
       "command": "node",
-      "args": ["dist/server.js"],
-      "env": {
-        "PROJECT_DIR": "${workspaceFolder}"
-      }
+      "args": ["dist/server.js"]
     }
   }
 }

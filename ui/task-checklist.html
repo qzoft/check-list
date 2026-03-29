@@ -51,7 +51,7 @@
     }
 
     #app {
-      max-width: 600px;
+      max-width: none;
     }
 
     h2 {
@@ -102,9 +102,58 @@
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: var(--checked-fg);
-      margin: 0 0 6px;
-      padding-bottom: 4px;
+      margin: 0 0 4px;
+      padding-bottom: 3px;
       border-bottom: 1px solid var(--border);
+    }
+
+    .section-title.level-3 {
+      font-size: 12px;
+      text-transform: none;
+      letter-spacing: normal;
+      border-bottom: none;
+      padding-left: 10px;
+      margin: 0 0 2px;
+      padding-bottom: 0;
+      color: var(--fg);
+      opacity: 0.75;
+    }
+
+    .section-breadcrumb {
+      font-size: 11px;
+      color: var(--checked-fg);
+      opacity: 0.7;
+      margin-right: 4px;
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: normal;
+    }
+
+    .section-breadcrumb .sep {
+      margin: 0 3px;
+    }
+
+    .section.level-3 {
+      padding-left: 10px;
+      margin-bottom: 6px;
+    }
+
+    .section-title.level-4 {
+      font-size: 12px;
+      text-transform: none;
+      letter-spacing: normal;
+      border-bottom: none;
+      padding-left: 20px;
+      margin: 0 0 2px;
+      padding-bottom: 0;
+      color: var(--fg);
+      opacity: 0.6;
+      font-weight: 500;
+    }
+
+    .section.level-4 {
+      padding-left: 20px;
+      margin-bottom: 4px;
     }
 
     .task-list {
@@ -116,8 +165,8 @@
     .task-item {
       display: flex;
       align-items: flex-start;
-      gap: 8px;
-      padding: 3px 0;
+      gap: 6px;
+      padding: 1px 0;
     }
 
     .task-item input[type="checkbox"] {
@@ -136,6 +185,9 @@
     .task-label {
       cursor: pointer;
       user-select: none;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .task-label.done {
@@ -214,8 +266,22 @@
       }
     });
 
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
     function handleToolResult(result) {
       try {
+        // Check for error responses first
+        if (result.isError) {
+          const textContent = result.content?.find(c => c.type === 'text');
+          const msg = textContent?.text || 'Unknown error';
+          sectionsEl.innerHTML = '<p style="color:var(--save-err)">Error: ' + escapeHtml(msg) + '</p>';
+          return;
+        }
+
         // Prefer structuredContent, fall back to parsing text content
         let fileGroups = result.structuredContent?.files;
         if (!fileGroups) {
@@ -228,7 +294,7 @@
           renderFileGroups(fileGroups);
         }
       } catch (err) {
-        sectionsEl.innerHTML = '<p>Error loading tasks: ' + (err.message || String(err)) + '</p>';
+        sectionsEl.innerHTML = '<p style="color:var(--save-err)">Error loading tasks: ' + escapeHtml(err.message || String(err)) + '</p>';
       }
     }
 
@@ -320,12 +386,19 @@
         const visibleSections = fg.sections.filter(s => s.tasks.length > 0);
 
         for (const section of visibleSections) {
+          const level = section.level || 2;
           const sectionEl = document.createElement('div');
-          sectionEl.className = 'section';
+          sectionEl.className = 'section' + (level >= 4 ? ' level-4' : level >= 3 ? ' level-3' : '');
 
           const titleEl = document.createElement('div');
-          titleEl.className = 'section-title';
-          titleEl.textContent = section.name;
+          titleEl.className = 'section-title' + (level >= 4 ? ' level-4' : level >= 3 ? ' level-3' : '');
+          if (section.parents && section.parents.length > 0) {
+            const breadcrumb = document.createElement('span');
+            breadcrumb.className = 'section-breadcrumb';
+            breadcrumb.innerHTML = section.parents.map(p => escapeHtml(p)).join('<span class="sep">›</span>') + '<span class="sep">›</span>';
+            titleEl.appendChild(breadcrumb);
+          }
+          titleEl.appendChild(document.createTextNode(section.name));
           sectionEl.appendChild(titleEl);
 
           const listEl = document.createElement('ul');
@@ -348,7 +421,7 @@
             checkboxEl.addEventListener('change', () => {
               const newChecked = checkboxEl.checked;
               labelEl.className = 'task-label' + (newChecked ? ' done' : '');
-              autoSave(fg.file, task.line, newChecked, checkboxEl, labelEl);
+              autoSave(fg.absolutePath || fg.file, task.line, newChecked, checkboxEl, labelEl);
             });
 
             itemEl.appendChild(checkboxEl);

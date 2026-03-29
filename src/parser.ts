@@ -6,12 +6,15 @@ export interface Task {
 
 export interface TaskSection {
   name: string;
+  level: number;
+  parents?: string[];
   tasks: Task[];
 }
 
 /** Represents all checkbox tasks found in a single markdown file. */
 export interface FileTaskGroup {
   file: string;
+  absolutePath?: string;
   sections: TaskSection[];
 }
 
@@ -23,14 +26,30 @@ export function parseTasks(markdown: string): TaskSection[] {
   const lines = markdown.replace(/\r/g, '').split('\n');
   const sections: TaskSection[] = [];
   let currentSection: TaskSection | null = null;
+  // Track current header at each level for parent breadcrumbs
+  let currentH2 = '';
+  let currentH3 = '';
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Match section headers: ## SectionName
-    const sectionMatch = line.match(/^##\s+(.+)$/);
+    // Match section headers: ##, ### or #### SectionName
+    const sectionMatch = line.match(/^(#{2,4})\s+(.+)$/);
     if (sectionMatch) {
-      currentSection = { name: sectionMatch[1].trim(), tasks: [] };
+      const level = sectionMatch[1].length;
+      const name = sectionMatch[2].trim();
+      const parents: string[] = [];
+      if (level === 2) {
+        currentH2 = name;
+        currentH3 = '';
+      } else if (level === 3) {
+        currentH3 = name;
+        if (currentH2) parents.push(currentH2);
+      } else if (level === 4) {
+        if (currentH2) parents.push(currentH2);
+        if (currentH3) parents.push(currentH3);
+      }
+      currentSection = { name, level, parents: parents.length ? parents : undefined, tasks: [] };
       sections.push(currentSection);
       continue;
     }
@@ -42,7 +61,7 @@ export function parseTasks(markdown: string): TaskSection[] {
     if (checkedMatch || uncheckedMatch) {
       // Ensure there is a section to hold the task
       if (!currentSection) {
-        currentSection = { name: 'Tasks', tasks: [] };
+        currentSection = { name: 'Tasks', level: 2, tasks: [] };
         sections.push(currentSection);
       }
 

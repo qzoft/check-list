@@ -34,12 +34,32 @@ export async function discoverMarkdownFiles(dir: string): Promise<string[]> {
 
       const fullPath = path.join(current, entry.name);
 
-      if (entry.isDirectory()) {
+      // entry.isDirectory() doesn't follow symlinks/junctions;
+      // fall back to fs.stat for symbolic links to resolve the real type.
+      let isDir = entry.isDirectory();
+      if (!isDir && entry.isSymbolicLink()) {
+        try {
+          const stat = await fs.stat(fullPath);
+          isDir = stat.isDirectory();
+        } catch {
+          continue; // skip broken links
+        }
+      }
+
+      if (isDir) {
         if (!IGNORED_DIRS.has(entry.name)) {
           await walk(fullPath);
         }
-      } else if (entry.isFile() && entry.name.endsWith('.md')) {
-        results.push(fullPath);
+      } else if (entry.name.endsWith('.md')) {
+        // Use stat to follow symlinks/hard links that isFile() may miss
+        try {
+          const stat = await fs.stat(fullPath);
+          if (stat.isFile()) {
+            results.push(fullPath);
+          }
+        } catch {
+          // skip files we can't stat
+        }
       }
     }
   }

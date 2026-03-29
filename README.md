@@ -18,10 +18,7 @@ Add the following to your project's `.vscode/mcp.json`:
   "servers": {
     "check-list": {
       "command": "npx",
-      "args": ["-y", "@qzoft/check-list"],
-      "env": {
-        "PROJECT_DIR": "${workspaceFolder}"
-      }
+      "args": ["-y", "@qzoft/check-list"]
     }
   }
 }
@@ -84,7 +81,7 @@ The parser recognizes `## Section` headers and checkbox list items in any `.md` 
 - [ ] Update README
 
 ## This Week
-- [ ] Review PRs
+- [x] Review PRs
 - [ ] Deploy to staging
 ```
 

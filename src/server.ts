@@ -59,24 +59,61 @@ registerAppTool(
   server,
   'list_tasks',
   {
-    description: 'Discover and display checklists from all markdown files in the project',
+    description: 'Discover and display checklists from markdown files. IMPORTANT: Always pass the `cwd` parameter with the absolute path of the current workspace folder so the tool knows where to look for files. When the user asks to see tasks in a specific file, also pass its ABSOLUTE file path as the `file` parameter.',
+    inputSchema: {
+      cwd: z.string().describe('REQUIRED. The absolute path to the current workspace/project folder (e.g. "C:\\\\Users\\\\me\\\\projects\\\\my-app" or "/home/me/projects/my-app"). This tells the tool where to scan for markdown files.'),
+      file: z.string().optional().describe('Optional ABSOLUTE path to a specific markdown file. Omit to scan all markdown files in the workspace folder.'),
+    },
     _meta: { ui: { resourceUri: uiResourceUri } },
   },
-  async () => {
+  async ({ cwd, file }) => {
+    // Use the provided cwd, fall back to env/config projectDir
+    const effectiveDir = cwd ? path.resolve(cwd) : projectDir;
     let mdFiles: string[];
-    try {
-      mdFiles = await discoverMarkdownFiles(projectDir);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return {
-        isError: true,
-        content: [
-          {
-            type: 'text' as const,
-            text: `Error scanning project directory ${projectDir}: ${message}`,
-          },
-        ],
-      };
+
+    if (file) {
+      // Single-file mode
+      const resolved = path.isAbsolute(file) ? path.resolve(file) : path.resolve(effectiveDir, file);
+      if (!fs.existsSync(resolved)) {
+        // Try to find by filename in the workspace
+        const basename = path.basename(file);
+        try {
+          const allMd = await discoverMarkdownFiles(effectiveDir);
+          const match = allMd.find(f => f.endsWith(path.sep + file.replace(/\//g, path.sep)))
+            || allMd.find(f => path.basename(f) === basename);
+          if (match) {
+            mdFiles = [match];
+          } else {
+            return {
+              isError: true,
+              content: [{ type: 'text' as const, text: `File not found: ${file}` }],
+            };
+          }
+        } catch {
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: `File not found: ${file}` }],
+          };
+        }
+      } else {
+        mdFiles = [resolved];
+      }
+    } else {
+      // All-files mode: discover every markdown file in the workspace
+      try {
+        mdFiles = await discoverMarkdownFiles(effectiveDir);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return {
+          isError: true,
+          content: [
+            {
+              type: 'text' as const,
+              text: `Error scanning directory ${effectiveDir}: ${message}`,
+            },
+          ],
+        };
+      }
     }
 
     const fileGroups: FileTaskGroup[] = [];
@@ -86,6 +123,12 @@ registerAppTool(
       try {
         content = await readTaskFile(filePath);
       } catch {
+        if (file) {
+          return {
+            isError: true,
+            content: [{ type: 'text' as const, text: `Could not read file: ${filePath}` }],
+          };
+        }
         continue; // skip files we can't read
       }
 
@@ -93,9 +136,8 @@ registerAppTool(
       const hasTasks = sections.some((s) => s.tasks.length > 0);
       if (!hasTasks) continue;
 
-      // Use relative path for cleaner display
-      const relPath = path.relative(projectDir, filePath);
-      fileGroups.push({ file: relPath, sections });
+      const relPath = path.relative(effectiveDir, filePath);
+      fileGroups.push({ file: relPath, absolutePath: filePath, sections });
     }
 
     return {
@@ -114,9 +156,9 @@ registerAppTool(
   server,
   'update_tasks',
   {
-    description: 'Update checkbox states in a project markdown file (auto-saved on toggle)',
+    description: 'Update checkbox states in a markdown file (auto-saved on toggle)',
     inputSchema: {
-      file: z.string().describe('Relative path to the markdown file within the project'),
+      file: z.string().describe('ABSOLUTE path to the markdown file.'),
       updates: z.array(
         z.object({
           line: z.number().describe('0-indexed line number in the markdown file'),
@@ -127,7 +169,7 @@ registerAppTool(
     _meta: { ui: { resourceUri: uiResourceUri, visibility: ['app'] } },
   },
   async ({ file, updates }) => {
-    const filePath = path.resolve(projectDir, file);
+    const filePath = path.isAbsolute(file) ? path.resolve(file) : path.resolve(projectDir, file);
 
     let content: string;
     try {
