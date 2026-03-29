@@ -10,34 +10,18 @@
     }
 
     :root {
-      --bg: #ffffff;
-      --fg: #1f2328;
-      --border: #d1d5db;
-      --section-bg: #f6f8fa;
-      --checked-fg: #6b7280;
-      --accent: #0969da;
-      --accent-hover: #0550ae;
-      --file-bg: #f0f4f8;
-      --file-border: #c8d1da;
+      --bg: #0d1117;
+      --fg: #e6edf3;
+      --border: #30363d;
+      --section-bg: #161b22;
+      --checked-fg: #8b949e;
+      --accent: #58a6ff;
+      --accent-hover: #79c0ff;
+      --file-bg: #161b22;
+      --file-border: #30363d;
       --radius: 6px;
-      --save-ok: #1a7f37;
-      --save-err: #cf222e;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0d1117;
-        --fg: #e6edf3;
-        --border: #30363d;
-        --section-bg: #161b22;
-        --checked-fg: #8b949e;
-        --accent: #58a6ff;
-        --accent-hover: #79c0ff;
-        --file-bg: #161b22;
-        --file-border: #30363d;
-        --save-ok: #3fb950;
-        --save-err: #f85149;
-      }
+      --save-ok: #3fb950;
+      --save-err: #f85149;
     }
 
     body {
@@ -97,7 +81,7 @@
     }
 
     .section-title {
-      font-size: 13px;
+      font-size: 16px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
@@ -108,7 +92,7 @@
     }
 
     .section-title.level-3 {
-      font-size: 12px;
+      font-size: 14px;
       text-transform: none;
       letter-spacing: normal;
       border-bottom: none;
@@ -119,27 +103,13 @@
       opacity: 0.75;
     }
 
-    .section-breadcrumb {
-      font-size: 11px;
-      color: var(--checked-fg);
-      opacity: 0.7;
-      margin-right: 4px;
-      font-weight: 400;
-      text-transform: none;
-      letter-spacing: normal;
-    }
-
-    .section-breadcrumb .sep {
-      margin: 0 3px;
-    }
-
     .section.level-3 {
       padding-left: 10px;
       margin-bottom: 6px;
     }
 
     .section-title.level-4 {
-      font-size: 12px;
+      font-size: 14px;
       text-transform: none;
       letter-spacing: normal;
       border-bottom: none;
@@ -147,7 +117,7 @@
       margin: 0 0 2px;
       padding-bottom: 0;
       color: var(--fg);
-      opacity: 0.6;
+      opacity: 0.7;
       font-weight: 500;
     }
 
@@ -383,7 +353,16 @@
         const bodyEl = document.createElement('div');
         bodyEl.className = 'file-body';
 
-        const visibleSections = fg.sections.filter(s => s.tasks.length > 0);
+        const visibleSections = fg.sections.filter(s => {
+          if (s.tasks.length > 0) return true;
+          // Show parent headers that have child sections with tasks after them
+          const idx = fg.sections.indexOf(s);
+          for (let j = idx + 1; j < fg.sections.length; j++) {
+            if (fg.sections[j].level <= s.level) break;
+            if (fg.sections[j].tasks.length > 0) return true;
+          }
+          return false;
+        });
 
         for (const section of visibleSections) {
           const level = section.level || 2;
@@ -392,13 +371,7 @@
 
           const titleEl = document.createElement('div');
           titleEl.className = 'section-title' + (level >= 4 ? ' level-4' : level >= 3 ? ' level-3' : '');
-          if (section.parents && section.parents.length > 0) {
-            const breadcrumb = document.createElement('span');
-            breadcrumb.className = 'section-breadcrumb';
-            breadcrumb.innerHTML = section.parents.map(p => escapeHtml(p)).join('<span class="sep">›</span>') + '<span class="sep">›</span>';
-            titleEl.appendChild(breadcrumb);
-          }
-          titleEl.appendChild(document.createTextNode(section.name));
+          titleEl.textContent = section.name;
           sectionEl.appendChild(titleEl);
 
           const listEl = document.createElement('ul');

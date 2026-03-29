@@ -12,17 +12,15 @@ if (-not (Test-Path $npxDir)) {
     return
 }
 
-$found = $false
-Get-ChildItem $npxDir -Recurse -Filter "package.json" |
+$removed = Get-ChildItem $npxDir -Recurse -Filter "package.json" |
     Where-Object { (Get-Content $_.FullName -Raw) -match 'check-list' } |
     ForEach-Object {
         $dir = $_.Directory.Parent.FullName
         Write-Host "Removing cached package: $dir" -ForegroundColor Cyan
         Remove-Item $dir -Recurse -Force
-        $found = $true
     }
 
-if ($found) {
+if ($removed) {
     Write-Host "Cache cleared. Reload VS Code to fetch the latest version." -ForegroundColor Green
 } else {
     Write-Host "No cached check-list package found — already clean." -ForegroundColor Yellow
