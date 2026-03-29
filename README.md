@@ -59,7 +59,7 @@ Once the server is running, you can use two tools in Copilot Chat:
 ```
 
 1. The MCP server recursively discovers all `.md` files in the project directory.
-2. Each file is parsed for `## Section` headers and `- [ ]` / `- [x]` checkbox items.
+2. Each file is parsed for `##`, `###`, and `####` section headers and `- [ ]` / `- [x]` checkbox items.
 3. VS Code renders `ui/task-checklist.html` as an interactive iframe grouped by file.
 4. Toggling a checkbox **immediately saves** the change back to the originating file — no save button required.
 
@@ -73,7 +73,7 @@ If neither is set, the server uses the current working directory.
 
 ## Task file format
 
-The parser recognizes `## Section` headers and checkbox list items in any `.md` file:
+The parser recognizes `##`, `###`, and `####` section headers and checkbox list items in any `.md` file:
 
 ```markdown
 ## Today
@@ -83,9 +83,17 @@ The parser recognizes `## Section` headers and checkbox list items in any `.md` 
 ## This Week
 - [x] Review PRs
 - [ ] Deploy to staging
+
+## Plan
+### Decisions for Meeting
+#### Sub Topic 1
+- [ ] Define scope
+- [ ] Review timeline
+#### Sub Topic 2
+- [ ] Prioritize features
 ```
 
-Checkbox items that appear before any section header are grouped under a default "Tasks" section. Non-checkbox content is preserved as-is when writing back.
+Nested `###` and `####` sections are displayed with visual hierarchy in the UI. Checkbox items that appear before any section header are grouped under a default "Tasks" section. Non-checkbox content is preserved as-is when writing back.
 
 The server skips common non-project directories (`node_modules`, `.git`, `dist`, `build`, etc.) during scanning.
 

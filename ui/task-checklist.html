@@ -73,7 +73,14 @@
     }
 
     .section {
-      margin-bottom: 12px;
+      margin-bottom: 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .section:first-child {
+      border-top: none;
+      padding-top: 0;
     }
 
     .section:last-child {
@@ -105,25 +112,29 @@
 
     .section.level-3 {
       padding-left: 10px;
-      margin-bottom: 6px;
+      margin-bottom: 10px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border);
     }
 
     .section-title.level-4 {
       font-size: 14px;
       text-transform: none;
       letter-spacing: normal;
-      border-bottom: none;
-      padding-left: 20px;
-      margin: 0 0 2px;
-      padding-bottom: 0;
-      color: var(--fg);
-      opacity: 0.7;
-      font-weight: 500;
+      border-bottom: 1px solid var(--border);
+      padding-left: 0;
+      margin: 0 0 4px;
+      padding-bottom: 3px;
+      color: var(--checked-fg);
+      opacity: 1;
+      font-weight: 600;
     }
 
     .section.level-4 {
-      padding-left: 20px;
-      margin-bottom: 4px;
+      padding-left: 6px;
+      margin-bottom: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
     }
 
     .task-list {
