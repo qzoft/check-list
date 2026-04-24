@@ -38,6 +38,10 @@ export function parseTasks(markdown: string): TaskSection[] {
     if (sectionMatch) {
       const level = sectionMatch[1].length;
       const name = sectionMatch[2].trim();
+
+      // Stop parsing tasks once we hit the Log section
+      if (level === 2 && name === 'Log') break;
+
       const parents: string[] = [];
       if (level === 2) {
         currentH2 = name;
@@ -105,6 +109,154 @@ export function serializeTasks(
       // Mark as unchecked: replace - [x] with - [ ]
       lines[update.line] = line.replace(/^(- )\[[xX]\]/, '$1[ ]');
     }
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Returns the breadcrumb trail for a task at the given line number,
+ * e.g. "Plan > Decisions for Meeting > sub topic 1".
+ */
+export function getTaskBreadcrumb(sections: TaskSection[], lineNumber: number): string {
+  for (const section of sections) {
+    const hasTask = section.tasks.some(t => t.line === lineNumber);
+    if (hasTask) {
+      const parts = section.parents ? [...section.parents, section.name] : [section.name];
+      return parts.join(' > ');
+    }
+  }
+  return '';
+}
+
+/**
+ * Adds a log entry to the end of the markdown content under ## Log > ### date.
+ * Creates the Log section and/or date sub-header if they don't exist.
+ */
+export function addLogEntry(content: string, breadcrumb: string, taskText: string, date: string): string {
+  const entry = breadcrumb ? `- ${breadcrumb}: ${taskText}` : `- ${taskText}`;
+  const lines = content.replace(/\r/g, '').split('\n');
+
+  // Find the ## Log section
+  let logIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^## Log\s*$/.test(lines[i])) {
+      logIndex = i;
+      break;
+    }
+  }
+
+  if (logIndex === -1) {
+    // No Log section — append one at the end
+    // Ensure trailing newline before new section
+    const trimmed = content.replace(/\n+$/, '');
+    return trimmed + '\n\n## Log\n\n### ' + date + '\n' + entry + '\n';
+  }
+
+  // Log section exists — find or create the date sub-header
+  let dateIndex = -1;
+  let nextH2 = lines.length; // end of file if no next ## header
+  for (let i = logIndex + 1; i < lines.length; i++) {
+    if (/^## /.test(lines[i])) {
+      nextH2 = i;
+      break;
+    }
+    if (lines[i] === `### ${date}`) {
+      dateIndex = i;
+    }
+  }
+
+  if (dateIndex !== -1) {
+    // Date header exists — find the end of its entries and append
+    let insertAt = dateIndex + 1;
+    for (let i = dateIndex + 1; i < nextH2; i++) {
+      if (/^###\s/.test(lines[i])) break;
+      if (lines[i].startsWith('- ')) insertAt = i + 1;
+      else if (lines[i].trim() === '' && insertAt > dateIndex + 1) continue;
+      else if (/^###\s/.test(lines[i])) break;
+    }
+    lines.splice(insertAt, 0, entry);
+  } else {
+    // Date header doesn't exist — add at the end of the Log section (before next ## or EOF)
+    const insertAt = nextH2;
+    const block = (lines[insertAt - 1]?.trim() === '' ? '' : '\n') + `### ${date}\n${entry}\n`;
+    lines.splice(insertAt, 0, ...block.split('\n'));
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Removes a log entry matching the given task text from the ## Log section.
+ * Cleans up empty date sub-headers and empty Log sections.
+ */
+export function removeLogEntry(content: string, taskText: string): string {
+  const lines = content.replace(/\r/g, '').split('\n');
+
+  // Find the ## Log section
+  let logIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (/^## Log\s*$/.test(lines[i])) {
+      logIndex = i;
+      break;
+    }
+  }
+
+  if (logIndex === -1) return content; // No log section
+
+  // Find the end of the Log section
+  let logEnd = lines.length;
+  for (let i = logIndex + 1; i < lines.length; i++) {
+    if (/^## /.test(lines[i])) {
+      logEnd = i;
+      break;
+    }
+  }
+
+  // Find and remove the matching entry line
+  let removed = false;
+  for (let i = logIndex + 1; i < logEnd; i++) {
+    if (lines[i].startsWith('- ') && lines[i].endsWith(taskText)) {
+      lines.splice(i, 1);
+      logEnd--;
+      removed = true;
+      break;
+    }
+  }
+
+  if (!removed) return content;
+
+  // Clean up empty date sub-headers
+  for (let i = logEnd - 1; i > logIndex; i--) {
+    if (/^### /.test(lines[i])) {
+      // Check if this date header has any entries
+      let hasEntries = false;
+      for (let j = i + 1; j < logEnd; j++) {
+        if (/^### /.test(lines[j])) break;
+        if (lines[j].startsWith('- ')) { hasEntries = true; break; }
+      }
+      if (!hasEntries) {
+        // Remove the date header and any blank lines after it
+        let removeEnd = i + 1;
+        while (removeEnd < logEnd && lines[removeEnd]?.trim() === '') removeEnd++;
+        lines.splice(i, removeEnd - i);
+        logEnd -= (removeEnd - i);
+      }
+    }
+  }
+
+  // Clean up empty Log section
+  let logHasContent = false;
+  for (let i = logIndex + 1; i < logEnd; i++) {
+    if (lines[i].trim() !== '') { logHasContent = true; break; }
+  }
+  if (!logHasContent) {
+    // Remove the entire Log section including trailing blank lines
+    let removeEnd = logEnd;
+    // Also remove leading blank lines before ## Log
+    let removeStart = logIndex;
+    while (removeStart > 0 && lines[removeStart - 1]?.trim() === '') removeStart--;
+    lines.splice(removeStart, removeEnd - removeStart);
   }
 
   return lines.join('\n');

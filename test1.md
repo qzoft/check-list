@@ -16,4 +16,3 @@ These items need agreement from Uffe and Lars before the phases below are confir
 - [ ] **Phase 1 feature priority** — What’s in vs. out for the 3-month target?
 - [ ] **Phase 1 definition of done** — What does "done" look like at the end of Phase 1a and 1b specifically?
 - [ ] **Phase 2 direction** — Align on what production-ready means: full option coverage across all models, back office using runtime for real quotes, PFMP data quality validated. What's the realistic timeline and minimum feature set?
-

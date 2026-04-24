@@ -7,10 +7,15 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
 import { discoverMarkdownFiles, readTaskFile, writeTaskFile } from './writer.js';
-import { parseTasks, serializeTasks, FileTaskGroup } from './parser.js';
+import { parseTasks, serializeTasks, getTaskBreadcrumb, addLogEntry, removeLogEntry, FileTaskGroup } from './parser.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+/** Diagnostic logging to stderr (never interferes with MCP stdio transport). */
+function debug(msg: string): void {
+  process.stderr.write(`[check-list] ${msg}\n`);
+}
 
 // Use PROJECT_DIR if set, otherwise fall back to TASK_FILE's parent dir, or CWD
 const projectDir = (() => {
@@ -34,6 +39,9 @@ const projectDir = (() => {
 // MCP App UI resource
 const uiHtmlPath = path.resolve(__dirname, '..', 'ui', 'task-checklist.html');
 const uiResourceUri = 'ui://check-list/task-checklist.html';
+
+// Session-level flag: whether to log completed tasks
+let logEnabled = false;
 
 const server = new McpServer({
   name: 'check-list',
@@ -59,14 +67,18 @@ registerAppTool(
   server,
   'list_tasks',
   {
-    description: 'Discover and display checklists from markdown files. IMPORTANT: Always pass the `cwd` parameter with the absolute path of the current workspace folder so the tool knows where to look for files. When the user asks to see tasks in a specific file, also pass its ABSOLUTE file path as the `file` parameter.',
+    description: 'Discover and display checklists from markdown files. IMPORTANT: Always pass the `cwd` parameter with the absolute path of the current workspace folder so the tool knows where to look for files. When the user asks to see tasks in a specific file, also pass its ABSOLUTE file path as the `file` parameter. When the user mentions logging, activity log, or tracking completed tasks, pass `log: true` to enable completion logging.',
     inputSchema: {
       cwd: z.string().describe('REQUIRED. The absolute path to the current workspace/project folder (e.g. "C:\\\\Users\\\\me\\\\projects\\\\my-app" or "/home/me/projects/my-app"). This tells the tool where to scan for markdown files.'),
       file: z.string().optional().describe('Optional ABSOLUTE path to a specific markdown file. Omit to scan all markdown files in the workspace folder.'),
+      log: z.boolean().optional().describe('Pass true to enable completion logging: when a task is checked, a log entry with breadcrumb and date is appended to the markdown file. When unchecked, the log entry is removed.'),
     },
     _meta: { ui: { resourceUri: uiResourceUri } },
   },
-  async ({ cwd, file }) => {
+  async ({ cwd, file, log }) => {
+    // Update session-level logging flag
+    logEnabled = log === true;
+
     // Use the provided cwd, fall back to env/config projectDir
     const effectiveDir = cwd ? path.resolve(cwd) : projectDir;
     let mdFiles: string[];
@@ -116,6 +128,7 @@ registerAppTool(
       }
     }
 
+    debug(`list_tasks: effectiveDir=${effectiveDir}, files=${mdFiles.length}, log=${logEnabled}`);
     const fileGroups: FileTaskGroup[] = [];
 
     for (const filePath of mdFiles) {
@@ -140,6 +153,9 @@ registerAppTool(
       fileGroups.push({ file: relPath, absolutePath: filePath, sections });
     }
 
+    const totalTasks = fileGroups.reduce((n, fg) => n + fg.sections.reduce((m, s) => m + s.tasks.length, 0), 0);
+    debug(`list_tasks: returning ${fileGroups.length} file(s), ${totalTasks} task(s}`);
+
     return {
       content: [
         {
@@ -147,7 +163,7 @@ registerAppTool(
           text: 'The tasks are displayed in the interactive UI above. Do not repeat or summarize the task content in your response — the user can already see and interact with them.',
         },
       ],
-      structuredContent: { files: fileGroups } as Record<string, unknown>,
+      structuredContent: { files: fileGroups, log: logEnabled } as Record<string, unknown>,
     };
   }
 );
@@ -165,11 +181,14 @@ registerAppTool(
           checked: z.boolean().describe('New checked state for the checkbox'),
         })
       ).describe('Array of line updates to apply'),
+      log: z.boolean().optional().describe('When true, append/remove completion log entries in the markdown file.'),
     },
     _meta: { ui: { resourceUri: uiResourceUri, visibility: ['app'] } },
   },
-  async ({ file, updates }) => {
+  async ({ file, updates, log }) => {
+    debug(`update_tasks: file=${file}, updates=${JSON.stringify(updates)}, log=${log}`);
     const filePath = path.isAbsolute(file) ? path.resolve(file) : path.resolve(projectDir, file);
+    debug(`update_tasks: resolved path=${filePath}`);
 
     let content: string;
     try {
@@ -189,10 +208,35 @@ registerAppTool(
 
     const updated = serializeTasks(content, updates);
 
+    // Apply completion logging if enabled
+    let final = updated;
+    if (log) {
+      const sections = parseTasks(content);
+      const today = new Date().toISOString().slice(0, 10);
+
+      for (const update of updates) {
+        // Extract task text from the original line (strip \r for Windows line endings)
+        const origLine = content.split('\n')[update.line]?.replace(/\r$/, '');
+        if (!origLine) continue;
+        const taskMatch = origLine.match(/^- \[[ xX]\]\s+(.+)$/);
+        if (!taskMatch) continue;
+        const taskText = taskMatch[1].trim();
+
+        if (update.checked) {
+          const breadcrumb = getTaskBreadcrumb(sections, update.line);
+          final = addLogEntry(final, breadcrumb, taskText, today);
+        } else {
+          final = removeLogEntry(final, taskText);
+        }
+      }
+    }
+
     try {
-      await writeTaskFile(filePath, updated);
+      await writeTaskFile(filePath, final);
+      debug(`update_tasks: write OK → ${filePath}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      debug(`update_tasks: write FAILED → ${message}`);
       return {
         isError: true,
         content: [

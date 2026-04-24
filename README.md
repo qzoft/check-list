@@ -26,7 +26,7 @@ Add the following to your project's `.vscode/mcp.json`:
 
 That's it — VS Code will download and run the server automatically. No cloning or building required.
 
-In Copilot Chat, ask **"show my tasks"** → the `list_tasks` tool scans the project and renders the interactive checkbox UI.
+In Copilot Chat, ask **"show my tasks"** or **"list my tasks"** → the `list_tasks` tool scans the project and renders the interactive checkbox UI.
 
 ## Usage
 

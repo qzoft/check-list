@@ -212,11 +212,22 @@
     let rpcId = 1;
     const pendingRequests = new Map();
 
+    const REQUEST_TIMEOUT_MS = 10000;
+
     function sendRequest(method, params) {
       const id = rpcId++;
       window.parent.postMessage({ jsonrpc: '2.0', id, method, params }, '*');
       return new Promise((resolve, reject) => {
-        pendingRequests.set(id, { resolve, reject });
+        const timer = setTimeout(() => {
+          if (pendingRequests.has(id)) {
+            pendingRequests.delete(id);
+            reject(new Error('Request timed out — the MCP server did not respond'));
+          }
+        }, REQUEST_TIMEOUT_MS);
+        pendingRequests.set(id, {
+          resolve: (v) => { clearTimeout(timer); resolve(v); },
+          reject: (e) => { clearTimeout(timer); reject(e); },
+        });
       });
     }
 
@@ -272,7 +283,8 @@
           }
         }
         if (fileGroups) {
-          renderFileGroups(fileGroups);
+          const logFlag = result.structuredContent?.log === true;
+          renderFileGroups(fileGroups, logFlag);
         }
       } catch (err) {
         sectionsEl.innerHTML = '<p style="color:var(--save-err)">Error loading tasks: ' + escapeHtml(err.message || String(err)) + '</p>';
@@ -317,13 +329,17 @@
     /**
      * Auto-save a single checkbox toggle by calling the update_tasks tool via the host.
      */
+    let currentLogFlag = false;
+
     async function autoSave(file, line, checked, checkboxEl, labelEl) {
       checkboxEl.disabled = true;
 
       try {
+        const args = { file, updates: [{ line, checked }] };
+        if (currentLogFlag) args.log = true;
         await sendRequest('tools/call', {
           name: 'update_tasks',
-          arguments: { file, updates: [{ line, checked }] },
+          arguments: args,
         });
         showStatus('\u2705 Saved', 'ok');
       } catch (err) {
@@ -336,7 +352,8 @@
       }
     }
 
-    function renderFileGroups(fileGroups) {
+    function renderFileGroups(fileGroups, logFlag) {
+      currentLogFlag = !!logFlag;
       sectionsEl.innerHTML = '';
 
       const withTasks = fileGroups.filter(fg =>
