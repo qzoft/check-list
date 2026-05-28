@@ -8,8 +8,8 @@ If it's not on this page, it's not a priority. Everything else — projects, ide
 
 ## Today
 
-- [ ] GitHub Rollout: invite users + schedule first session — [project file](areas/head-of-ai/projects/github-rollout.md)
-- [ ] Prepare for meeting 2026-03-09 with Uffe and Lars — 3-4 month and 6-9 month plan for sales configurator
+- [x] GitHub Rollout: invite users + schedule first session — [project file](areas/head-of-ai/projects/github-rollout.md)
+- [x] Prepare for meeting 2026-03-09 with Uffe and Lars — 3-4 month and 6-9 month plan for sales configurator
 - [x] Add job change to LinkedIn
 
 ---
@@ -18,9 +18,9 @@ If it's not on this page, it's not a priority. Everything else — projects, ide
 
 Pick 3–5 things. No more. If you can't finish them this week, they're too big — break them down.
 
-- [ ] Prepare for meeting 2026-03-09 with Uffe and Lars — 3-4 month and 6-9 month plan for sales configurator
-- [ ] GitHub Rollout: invite users + schedule first session — [project file](areas/head-of-ai/projects/github-rollout.md)
-- [ ] PFMP: define scope and ownership at meeting 03-09 — [project file](areas/head-of-ai/projects/pfmp.md)
+- [x] Prepare for meeting 2026-03-09 with Uffe and Lars — 3-4 month and 6-9 month plan for sales configurator
+- [x] GitHub Rollout: invite users + schedule first session — [project file](areas/head-of-ai/projects/github-rollout.md)
+- [x] PFMP: define scope and ownership at meeting 03-09 — [project file](areas/head-of-ai/projects/pfmp.md)
 - [ ] STEP Export: architecture & scope (Phase 1) — [project file](areas/head-of-ai/projects/step-export.md)
 
 ---
