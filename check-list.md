@@ -11,6 +11,8 @@
 **Storage:** PATH_LOCAL
 **Intake:**  <!-- auto -->
 **Tags:** open
+**Links:** [npm: @qzoft/check-list](https://www.npmjs.com/package/@qzoft/check-list)
+**Activity ID:** check-list
 
 ---
 
@@ -23,6 +25,20 @@ A published, general-purpose MCP App (`@qzoft/check-list` on npm) that discovers
 ## Current Focus
 
 v1.0 is published. Stabilize, gather feedback, and decide on next features.
+
+---
+
+## Summary
+
+Published npm MCP App (@qzoft/check-list) — interactive markdown checklists in VS Code Copilot Chat.
+
+---
+
+## Highlights
+
+- Published to npm as @qzoft/check-list (v1.0.1).
+- Renders interactive checklists from any project markdown inside VS Code Copilot Chat.
+- Next: gather early user feedback; consider filtering by file or section.
 
 ---
 
